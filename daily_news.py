@@ -6,21 +6,20 @@
 
 import requests
 import json
+import re
 from datetime import datetime
 from typing import List, Dict
 
 # ============ 配置区域 ============
-# Server酱 SendKey (从环境变量读取，GitHub Secrets中配置)
 SENDKEY = "SCT345860T8LHiGPBoAKFb4u5qDDDELxyS"
 
-# 新闻搜索关键词配置
 NEWS_QUERIES = [
-    {"category": "🤖 AI&前沿科技要闻", "queries": ["大模型动态 今日", "AI人工智能最新进展", "ChatGPT GPT最新消息"]},
-    {"category": "💹 金融要闻（美股纳斯达克）", "queries": ["纳斯达克100 今日", "美股科技股 今日", "Apple Microsoft 股票"]},
-    {"category": "🐢 龟鳖要闻", "queries": ["龟类养殖技术", "鳖类繁殖技术"]},
-    {"category": "🧬 生物&野生动植物要闻", "queries": ["新物种发现", "生物科研突破"]},
-    {"category": "🐍 爬虫水产行情要闻", "queries": ["爬宠市场 行情", "水产养殖 价格"]},
-    {"category": "🌍 外交要闻", "queries": ["中国外交 最新动态", "国际关系 重大事件"]},
+    {"category": "🤖 AI&前沿科技要闻", "queries": ["AI人工智能 最新 2024", "大模型 ChatGPT 最新消息"]},
+    {"category": "💹 金融要闻（美股纳斯达克）", "queries": ["纳斯达克 美股 今日行情", "Apple Microsoft 股票 最新"]},
+    {"category": "🐢 龟鳖要闻", "queries": ["龟类养殖 繁殖技术"]},
+    {"category": "🧬 生物&野生动植物要闻", "queries": ["新物种发现 生物科研"]},
+    {"category": "🐍 爬虫水产行情要闻", "queries": ["爬宠市场 水产养殖"]},
+    {"category": "🌍 外交要闻", "queries": ["中国外交 国际关系 最新"]},
     {"category": "📰 国际大事要闻", "queries": ["国际重大新闻 今日", "全球热点事件"]}
 ]
 # ==================================
@@ -28,60 +27,68 @@ NEWS_QUERIES = [
 
 def send_wechat(title: str, content: str) -> bool:
     """通过Server酱发送微信消息"""
-    # 使用新版 Server酱 API
     url = f"https://sctapi.ftqq.com/{SENDKEY}.send"
-    
-    data = {
-        "title": title,
-        "desp": content
-    }
+    data = {"title": title, "desp": content}
     
     try:
-        print(f"📤 正在推送至微信...")
         response = requests.post(url, data=data, timeout=30)
-        
-        # 打印原始响应，方便调试
-        print(f"📬 Server酱响应状态码: {response.status_code}")
-        print(f"📬 Server酱原始响应: {response.text[:200]}")
-        
-        # 尝试解析JSON
-        try:
-            result = response.json()
-            print(f"📬 Server酱解析结果: {result}")
-            
-            # 新版API返回 code=0 表示成功
-            if result.get("code") == 0 or result.get("errno") == 0:
-                print(f"✅ 微信推送成功")
-                return True
-            else:
-                print(f"❌ 推送失败: {result.get('message', result)}")
-                return False
-        except json.JSONDecodeError:
-            # 如果不是JSON，检查是否返回 "success" 或 "ok"
-            if "success" in response.text.lower() or "ok" in response.text.lower():
-                print(f"✅ 微信推送成功")
-                return True
-            print(f"❌ Server酱返回非JSON格式")
-            return False
-            
+        result = response.json()
+        if result.get("code") == 0:
+            print(f"✅ 微信推送成功")
+            return True
+        print(f"❌ 推送失败: {result}")
+        return False
     except Exception as e:
         print(f"❌ 推送异常: {e}")
         return False
 
 
 def search_news(query: str) -> List[Dict]:
-    """搜索新闻"""
-    search_url = "https://ddg-api.vercel.app/search"
-    
+    """搜索新闻 - 使用 DuckDuckGo HTML 解析"""
     try:
-        params = {"q": query, "region": "cn", "max_results": 2}
-        response = requests.get(search_url, params=params, timeout=10)
+        # 方法1: 直接请求 DuckDuckGo
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+        
+        search_url = f"https://duckduckgo.com/html/?q={requests.utils.quote(query)}"
+        response = requests.get(search_url, headers=headers, timeout=15)
         
         if response.status_code == 200:
-            results = response.json()
-            return [{"title": item.get("title", ""), "url": item.get("url", "")} for item in results[:2]]
+            # 解析标题和链接
+            html = response.text
+            results = []
+            
+            # 匹配搜索结果
+            pattern = r'<a class="result__a" href="([^"]+)"[^>]*>([^<]+)</a>'
+            matches = re.findall(pattern, html)
+            
+            for url, title in matches[:3]:
+                # 清理HTML实体
+                title = re.sub(r'<[^>]+>', '', title)
+                title = re.sub(r'&amp;', '&', title)
+                title = re.sub(r'&quot;', '"', title)
+                if title and len(title) > 5:
+                    results.append({"title": title.strip(), "url": url})
+            
+            if results:
+                print(f"  ✅ 找到 {len(results)} 条结果")
+                return results
+                
     except Exception as e:
-        print(f"  搜索失败 [{query}]: {e}")
+        print(f"  ❌ 搜索失败: {e}")
+    
+    # 备用：使用 API
+    try:
+        api_url = "https://ddg-api.vercel.app/search"
+        params = {"q": query, "region": "cn", "max_results": 2}
+        resp = requests.get(api_url, params=params, timeout=10)
+        if resp.status_code == 200:
+            items = resp.json()
+            return [{"title": item.get("title", ""), "url": item.get("url", "")} for item in items[:2]]
+    except:
+        pass
     
     return []
 
@@ -98,12 +105,14 @@ def generate_daily_news() -> str:
         content += f"\n## {category}\n\n"
         
         for query in category_info["queries"]:
+            print(f"📂 正在获取: {query}")
             content += f"**【{query}】**\n"
             news = search_news(query)
             
             if news:
                 for item in news:
-                    content += f"- {item['title']}\n"
+                    # Markdown 链接格式
+                    content += f"- [{item['title']}]({item['url']})\n"
             else:
                 content += f"- 暂无最新消息\n"
         content += "\n"
