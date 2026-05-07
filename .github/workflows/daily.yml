@@ -3,7 +3,7 @@ name: Daily News Bot
 on:
   schedule:
     # 每天早上9点（北京时间 = UTC+8 = 1点UTC）
-    - cron: '0 1 * * *'
+    - cron: cron: '25 12 * * *'
   workflow_dispatch:  # 允许手动触发
 
 jobs:
