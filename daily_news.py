@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""陈小蓝每日要闻 - 推送到企业微信"""
+"""陈小蓝每日要闻 - 推送到企业微信（奏章风格）"""
 import requests, os, pathlib
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 WECOM_CORP_ID = os.environ.get("WECOM_CORP_ID", "")
 WECOM_AGENT_SECRET = os.environ.get("WECOM_AGENT_SECRET", "")
@@ -66,12 +66,19 @@ def main():
     if lock.exists() and lock.read_text().strip() == today:
         return 0
 
-    lines = [f"📰 **陈小蓝每日要闻**\n{datetime.now().strftime('%Y年%m月%d日')}\n"]
+    today_cn = datetime.now().strftime('%Y年%m月%d日')
+    lines = [
+        f"**臣 启禀吾主：**\n",
+        f"今日乃 {today_cn}，臣已为吾主汇总天下要闻，恭请御览。\n",
+        f"{'═'*20}\n"
+    ]
     for cat, qs in QUERIES:
         lines.append(f"\n── {cat} ──\n")
         for q in qs:
             lines.append(f"**{q}**")
             lines.extend(news(q))
+
+    lines.append(f"\n{'═'*20}\n**臣 谨奏**")
 
     if push("\n".join(lines)):
         lock.write_text(today)
