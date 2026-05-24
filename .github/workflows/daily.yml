@@ -1,7 +1,8 @@
 name: Daily News Bot
 on:
   schedule:
-    - cron: '36 13 * * *'
+    - cron: '0 1 * * *'    # 09:00 北京时间
+    - cron: '2 1 * * *'    # 09:02 冗余兜底
   workflow_dispatch:
 jobs:
   push-news:
@@ -13,3 +14,8 @@ jobs:
           python-version: '3.11'
       - run: pip install requests
       - run: python daily_news.py
+        env:
+          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
+          WECOM_AGENT_SECRET: ${{ secrets.WECOM_AGENT_SECRET }}
+          WECOM_AGENT_ID: ${{ secrets.WECOM_AGENT_ID }}
+          WECOM_TO_USER: ${{ secrets.WECOM_TO_USER }}
