@@ -1,140 +1,83 @@
 #!/usr/bin/env python3
-"""
-陈小蓝智能要闻助手 - 使用 NewsAPI 稳定版
-"""
-
-import requests
-import json
+"""陈小蓝每日要闻 - 推送到企业微信"""
+import requests, os, pathlib
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Optional
 
-# ============ 配置 ============
-SENDKEY = "SCT345860T8LHiGPBoAKFb4u5qDDDELxyS"
+WECOM_CORP_ID = os.environ.get("WECOM_CORP_ID", "")
+WECOM_AGENT_SECRET = os.environ.get("WECOM_AGENT_SECRET", "")
+WECOM_AGENT_ID = os.environ.get("WECOM_AGENT_ID", "")
+WECOM_TO_USER = os.environ.get("WECOM_TO_USER", "")
 
-NEWS_QUERIES = [
-    {"category": "🤖 AI&前沿科技要闻", "queries": ["AI 人工智能", "ChatGPT 大模型"]},
-    {"category": "💹 金融要闻（美股纳斯达克）", "queries": ["纳斯达克 美股", "Apple Microsoft 股票"]},
-    {"category": "🐢 龟鳖要闻", "queries": ["龟类养殖", "鳖类繁殖"]},
-    {"category": "🧬 生物&野生动植物要闻", "queries": ["新物种发现", "生物科研"]},
-    {"category": "🐍 爬虫水产行情要闻", "queries": ["爬宠市场", "水产养殖"]},
-    {"category": "🌍 外交要闻", "queries": ["中国外交", "国际关系"]},
-    {"category": "📰 国际大事要闻", "queries": ["国际新闻", "全球热点"]}
+QUERIES = [
+    ("🤖 AI&前沿科技", ["AI 人工智能", "ChatGPT 大模型"]),
+    ("💹 金融（美股）", ["纳斯达克 美股", "Apple Microsoft 股票"]),
+    ("🐢 龟鳖要闻", ["龟类养殖", "鳖类繁殖"]),
+    ("🧬 生物&野生动植物", ["新物种发现", "生物科研"]),
+    ("🐍 爬虫水产行情", ["爬宠市场", "水产养殖"]),
+    ("🌍 外交要闻", ["中国外交", "国际关系"]),
+    ("📰 国际大事", ["国际新闻", "全球热点"]),
 ]
-# ==============================
 
+def get_token() -> Optional[str]:
+    r = requests.get(
+        f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={WECOM_CORP_ID}&corpsecret={WECOM_AGENT_SECRET}",
+        timeout=10
+    )
+    d = r.json()
+    return d.get("access_token") if d.get("errcode") == 0 else None
 
-def send_wechat(title: str, content: str) -> bool:
-    """发送微信"""
-    url = f"https://sctapi.ftqq.com/{SENDKEY}.send"
-    try:
-        r = requests.post(url, data={"title": title, "desp": content}, timeout=30)
-        if r.json().get("code") == 0:
-            print("✅ 推送成功")
-            return True
-        print(f"❌ 失败: {r.json()}")
+def push(text: str) -> bool:
+    token = get_token()
+    if not token:
         return False
-    except Exception as e:
-        print(f"❌ 异常: {e}")
-        return False
+    r = requests.post(
+        f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}",
+        json={"touser": WECOM_TO_USER, "msgtype": "markdown",
+              "agentid": WECOM_AGENT_ID, "markdown": {"content": text},
+              "enable_duplicate_check": 1, "duplicate_check_interval": 1800},
+        timeout=15
+    )
+    return r.json().get("errcode") == 0
 
-
-def search_news(query: str) -> List[Dict]:
-    """使用 NewsData.io 免费 API 搜索"""
-    results = []
-    
-    # 方法1: NewsData.io API (免费额度)
-    try:
-        # 你需要去 https://newsdata.io 免费申请一个 API key
-        # 暂时用备用方式
-        pass
-    except:
-        pass
-    
-    # 方法2: 使用 Google News RSS (最稳定)
-    try:
-        import xml.etree.ElementTree as ET
-        
-        search_url = f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        
-        r = requests.get(search_url, headers=headers, timeout=15)
-        
-        if r.status_code == 200:
-            root = ET.fromstring(r.content)
-            
-            for item in root.findall('.//item')[:3]:
-                title = item.find('title')
-                link = item.find('link')
-                
-                if title is not None and link is not None:
-                    t = title.text or ""
-                    l = link.text or ""
-                    
-                    # 清理标题中的 HTML
-                    t = t.replace('<b>', '').replace('</b>', '')
-                    t = t.strip()
-                    
-                    if t and len(t) > 5:
-                        results.append({"title": t, "url": l})
-            
-            if results:
-                print(f"  ✅ 找到 {len(results)} 条")
-                return results
-                
-    except Exception as e:
-        print(f"  ❌ RSS失败: {e}")
-    
-    # 方法3: 备用 API
-    try:
-        api_url = "https://api.currentsapi.services/api/v1/latest_news"
-        params = {
-            "apiKey": "demo",  # 需要申请真实key
-            "keywords": query,
-            "language": "zh"
-        }
-        r = requests.get(api_url, params=params, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            news = data.get("news", [])
-            for n in news[:3]:
-                results.append({
-                    "title": n.get("title", "")[:80],
-                    "url": n.get("url", "")
-                })
-            if results:
-                print(f"  ✅ 备用API找到 {len(results)} 条")
-                return results
-    except:
-        pass
-    
-    return []
-
+def news(query: str) -> list:
+    import xml.etree.ElementTree as ET
+    for _ in range(3):
+        try:
+            r = requests.get(
+                f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl=zh-CN&gl=CN",
+                headers={"User-Agent": "Mozilla/5.0"}, timeout=15
+            )
+            items = []
+            for item in ET.fromstring(r.content).findall('.//item')[:3]:
+                t = (item.findtext('title','').replace('<b>','').replace('</b>','').strip())
+                l = item.findtext('link','')
+                if t and len(t)>5:
+                    items.append(f"[{t}]({l})")
+            if items:
+                return items
+        except:
+            import time; time.sleep(2)
+    return ["暂无消息"]
 
 def main():
-    print("🚀 启动新闻助手...")
-    
-    today = datetime.now().strftime("%Y年%m月%d日")
-    content = f"# 📰 陈小蓝每日要闻\n\n**{today}**\n\n---\n"
-    
-    for cat in NEWS_QUERIES:
-        content += f"\n## {cat['category']}\n\n"
-        for q in cat["queries"]:
-            print(f"📂 {q}")
-            content += f"**【{q}】**\n"
-            news = search_news(q)
-            if news:
-                for n in news:
-                    content += f"- [{n['title']}]({n['url']})\n"
-            else:
-                content += "- 暂无消息\n"
-        content += "\n"
-    
-    title = f"📰 陈小蓝每日要闻 | {datetime.now().strftime('%m月%d日')}"
-    send_wechat(title, content)
-    
-    print("✅ 完成!")
-    return 0
+    today = datetime.now().strftime("%Y-%m-%d")
+    lock = pathlib.Path("/tmp/news.lock")
+    if lock.exists() and lock.read_text().strip() == today:
+        return 0
 
+    lines = [f"📰 **陈小蓝每日要闻**\n{datetime.now().strftime('%Y年%m月%d日')}\n"]
+    for cat, qs in QUERIES:
+        lines.append(f"\n── {cat} ──\n")
+        for q in qs:
+            lines.append(f"**{q}**")
+            lines.extend(news(q))
+
+    if push("\n".join(lines)):
+        lock.write_text(today)
+        print("✅ 手机查看企业微信")
+        return 0
+    return 1
 
 if __name__ == "__main__":
     exit(main())
