@@ -1,8 +1,8 @@
 name: Daily News Bot
 on:
   schedule:
-    - cron: '0 1 * * *'    # 09:00 北京时间
-    - cron: '2 1 * * *'    # 09:02 冗余兜底
+    - cron: '0 1 * * *'
+    - cron: '2 1 * * *'
   workflow_dispatch:
 jobs:
   push-news:
