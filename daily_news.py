@@ -30,6 +30,7 @@ def get_token() -> Optional[str]:
 def push(text: str) -> bool:
     token = get_token()
     if not token:
+        print("❌ 获取 token 失败")
         return False
     r = requests.post(
         f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}",
@@ -38,7 +39,13 @@ def push(text: str) -> bool:
               "enable_duplicate_check": 1, "duplicate_check_interval": 1800},
         timeout=15
     )
-    return r.json().get("errcode") == 0
+    resp = r.json()
+    print(f"📤 推送响应: {resp}")
+    if resp.get("errcode") == 0:
+        return True
+    else:
+        print(f"❌ 推送失败: {resp}")
+        return False
 
 def news(query: str) -> list:
     import xml.etree.ElementTree as ET
