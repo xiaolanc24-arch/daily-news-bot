@@ -1,0 +1,16 @@
+name: Debug
+on: workflow_dispatch
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python debug_test.py
+        env:
+          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
+          WECOM_AGENT_SECRET: ${{ secrets.WECOM_AGENT_SECRET }}
+          WECOM_AGENT_ID: ${{ secrets.WECOM_AGENT_ID }}
+          WECOM_TO_USER: ${{ secrets.WECOM_TO_USER }}
