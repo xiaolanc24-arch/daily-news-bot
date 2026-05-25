@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""陈小蓝每日要闻 - 推送到企业微信（奏章风格）"""
+"""陈小蓝每日要闻 - Server酱推送（奏章风格）"""
 import requests, os, pathlib
 from datetime import datetime
-from typing import Optional
 
-WECOM_CORP_ID = os.environ.get("WECOM_CORP_ID", "")
-WECOM_AGENT_SECRET = os.environ.get("WECOM_AGENT_SECRET", "")
-WECOM_AGENT_ID = os.environ.get("WECOM_AGENT_ID", "")
-WECOM_TO_USER = os.environ.get("WECOM_TO_USER", "")
+SENDKEY = os.environ.get("SENDKEY", "")
 
 QUERIES = [
     ("🤖 AI&前沿科技", ["AI 人工智能", "ChatGPT 大模型"]),
@@ -19,77 +15,69 @@ QUERIES = [
     ("📰 国际大事", ["国际新闻", "全球热点"]),
 ]
 
-def get_token() -> Optional[str]:
-    r = requests.get(
-        f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={WECOM_CORP_ID}&corpsecret={WECOM_AGENT_SECRET}",
-        timeout=10
-    )
-    d = r.json()
-    return d.get("access_token") if d.get("errcode") == 0 else None
-
-def push(text: str) -> bool:
-    token = get_token()
-    if not token:
-        print("❌ 获取 token 失败")
-        return False
-    r = requests.post(
-        f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}",
-        json={"touser": WECOM_TO_USER, "msgtype": "markdown",
-              "agentid": WECOM_AGENT_ID, "markdown": {"content": text},
-              "enable_duplicate_check": 1, "duplicate_check_interval": 1800},
-        timeout=15
-    )
-    resp = r.json()
-    print(f"📤 推送响应: {resp}")
-    if resp.get("errcode") == 0:
-        return True
-    else:
-        print(f"❌ 推送失败: {resp}")
+def push(title: str, content: str) -> bool:
+    try:
+        r = requests.post(
+            f"https://sctapi.ftqq.com/{SENDKEY}.send",
+            data={"title": title, "desp": content},
+            timeout=30
+        )
+        ok = r.json().get("code") == 0
+        print(f"{'✅ 推送成功' if ok else f'❌ 失败: {r.json()}'}")
+        return ok
+    except Exception as e:
+        print(f"❌ 异常: {e}")
         return False
 
 def news(query: str) -> list:
     import xml.etree.ElementTree as ET
-    for _ in range(3):
+    for attempt in range(3):
         try:
             r = requests.get(
                 f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl=zh-CN&gl=CN",
-                headers={"User-Agent": "Mozilla/5.0"}, timeout=15
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=15
             )
             items = []
             for item in ET.fromstring(r.content).findall('.//item')[:3]:
-                t = (item.findtext('title','').replace('<b>','').replace('</b>','').strip())
-                l = item.findtext('link','')
-                if t and len(t)>5:
+                t = item.findtext('title', '').replace('<b>','').replace('</b>','').strip()
+                l = item.findtext('link', '')
+                if t and len(t) > 5:
                     items.append(f"[{t}]({l})")
             if items:
+                print(f"  ✅ {len(items)} 条")
                 return items
-        except:
-            import time; time.sleep(2)
+            print(f"  ⚠️ 空结果，重试({attempt+1}/3)")
+        except Exception as e:
+            print(f"  ⚠️ 第{attempt+1}次: {e}")
+        import time; time.sleep(2)
     return ["暂无消息"]
 
 def main():
     today = datetime.now().strftime("%Y-%m-%d")
     lock = pathlib.Path("/tmp/news.lock")
     if lock.exists() and lock.read_text().strip() == today:
+        print("⏭️ 今天已发过，跳过")
         return 0
 
     today_cn = datetime.now().strftime('%Y年%m月%d日')
     lines = [
-        f"**臣 启禀吾主：**\n",
-        f"今日乃 {today_cn}，臣已为吾主汇总天下要闻，恭请御览。\n",
-        f"{'═'*20}\n"
+        f"## 臣 启禀吾主：\n",
+        f"今日乃 {today_cn}，臣已为吾主汇总天下要闻，恭请御览。\n\n",
+        f"---\n"
     ]
     for cat, qs in QUERIES:
-        lines.append(f"\n── {cat} ──\n")
+        lines.append(f"\n### {cat}\n")
         for q in qs:
-            lines.append(f"**{q}**")
+            print(f"📂 {q}")
+            lines.append(f"\n**{q}**  \n")
             lines.extend(news(q))
 
-    lines.append(f"\n{'═'*20}\n**臣 谨奏**")
+    lines.append(f"\n---\n*臣 谨奏*")
 
-    if push("\n".join(lines)):
+    if push(f"【📰 吾主 陈小蓝 每日要闻已送达】", "\n".join(lines)):
         lock.write_text(today)
-        print("✅ 手机查看企业微信")
+        print("✅ 完成！请在微信服务号查看")
         return 0
     return 1
 
